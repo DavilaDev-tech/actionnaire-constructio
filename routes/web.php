@@ -14,6 +14,7 @@ use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\LivraisonController;
 use App\Http\Controllers\ApprovisionnementController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\BackupController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -148,6 +149,19 @@ Route::middleware(['role:admin,magasinier'])->group(function () {
     });
 
 });
+
+// Backups (admin seulement)
+Route::middleware(['role:admin'])->group(function () {
+    Route::get('backups', [BackupController::class, 'index'])
+         ->name('backups.index');
+    Route::post('backups/lancer', [BackupController::class, 'lancer'])
+         ->name('backups.lancer');
+    Route::get('backups/telecharger', [BackupController::class, 'telecharger'])
+         ->name('backups.telecharger');
+    Route::delete('backups/supprimer', [BackupController::class, 'supprimer'])
+         ->name('backups.supprimer');
+});
+
 
 // Exports Excel
 Route::middleware(['role:admin,comptable'])->group(function () {
