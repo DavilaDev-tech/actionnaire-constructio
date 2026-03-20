@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Services\ActiviteService;
 use Illuminate\Http\Request;
 
 class ClientController extends Controller
@@ -10,12 +11,12 @@ class ClientController extends Controller
     // ── Liste ──
     public function index()
     {
-        $clients       = Client::withCount('ventes')
-                               ->latest()
-                               ->paginate(10);
-        $totalClients  = Client::count();
-        $particuliers  = Client::where('type', 'particulier')->count();
-        $entreprises   = Client::where('type', 'entreprise')->count();
+        $clients      = Client::withCount('ventes')
+                              ->latest()
+                              ->paginate(10);
+        $totalClients = Client::count();
+        $particuliers = Client::where('type', 'particulier')->count();
+        $entreprises  = Client::where('type', 'entreprise')->count();
 
         return view('clients.index', compact(
             'clients', 'totalClients', 'particuliers', 'entreprises'
@@ -39,9 +40,20 @@ class ClientController extends Controller
             'type'      => 'required|in:particulier,entreprise',
         ]);
 
-        Client::create($request->only(
+        $client = Client::create($request->only(
             'nom', 'telephone', 'email', 'adresse', 'type'
         ));
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'creation',
+            'Clients',
+            "Création du client {$client->nom} — " .
+            ucfirst($client->type) .
+            ($client->telephone ? " — Tél : {$client->telephone}" : ''),
+            'Client',
+            $client->id
+        );
 
         return redirect()->route('clients.index')
                          ->with('success', 'Client créé avec succès !');
@@ -53,6 +65,15 @@ class ClientController extends Controller
         $client->load(['ventes' => function($q) {
             $q->latest()->take(5);
         }]);
+
+        // Enregistrer la consultation
+        ActiviteService::enregistrer(
+            'consultation',
+            'Clients',
+            "Consultation de la fiche client {$client->nom}",
+            'Client',
+            $client->id
+        );
 
         return view('clients.show', compact('client'));
     }
@@ -74,9 +95,35 @@ class ClientController extends Controller
             'type'      => 'required|in:particulier,entreprise',
         ]);
 
+        // Sauvegarder les données avant modification
+        $avant = [
+            'nom'       => $client->nom,
+            'telephone' => $client->telephone,
+            'email'     => $client->email,
+            'adresse'   => $client->adresse,
+            'type'      => $client->type,
+        ];
+
         $client->update($request->only(
             'nom', 'telephone', 'email', 'adresse', 'type'
         ));
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'modification',
+            'Clients',
+            "Modification du client {$client->nom}",
+            'Client',
+            $client->id,
+            $avant,
+            [
+                'nom'       => $client->nom,
+                'telephone' => $client->telephone,
+                'email'     => $client->email,
+                'adresse'   => $client->adresse,
+                'type'      => $client->type,
+            ]
+        );
 
         return redirect()->route('clients.index')
                          ->with('success', 'Client modifié avec succès !');
@@ -91,7 +138,19 @@ class ClientController extends Controller
                 $client->ventes()->count() . ' vente(s) associée(s) !');
         }
 
+        $nomClient = $client->nom;
+        $clientId  = $client->id;
+
         $client->delete();
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'suppression',
+            'Clients',
+            "Suppression du client {$nomClient}",
+            'Client',
+            $clientId
+        );
 
         return redirect()->route('clients.index')
                          ->with('success', 'Client supprimé avec succès !');

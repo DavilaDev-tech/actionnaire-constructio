@@ -74,7 +74,7 @@
             <div style="width:52px;height:52px;background:rgba(255,255,255,0.15);
                         border-radius:12px;display:flex;align-items:center;
                         justify-content:center;font-size:1.5rem">
-                👋
+                
             </div>
             <div>
                 <h5 class="mb-0">Bienvenue, {{ auth()->user()->nom_complet }} !</h5>

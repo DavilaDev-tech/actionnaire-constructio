@@ -7,6 +7,7 @@ use App\Models\VenteDetail;
 use App\Models\Facture;
 use App\Models\Client;
 use App\Models\Produit;
+use App\Services\ActiviteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -47,26 +48,28 @@ class VenteController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'client_id'              => 'required|exists:clients,id',
-            'date_vente'             => 'required|date',
-            'note'                   => 'nullable|string',
-            'produits'               => 'required|array|min:1',
-            'produits.*.produit_id'  => 'required|exists:produits,id',
-            'produits.*.quantite'    => 'required|integer|min:1',
+            'client_id'                => 'required|exists:clients,id',
+            'date_vente'               => 'required|date',
+            'note'                     => 'nullable|string',
+            'produits'                 => 'required|array|min:1',
+            'produits.*.produit_id'    => 'required|exists:produits,id',
+            'produits.*.quantite'      => 'required|integer|min:1',
             'produits.*.prix_unitaire' => 'required|numeric|min:0',
         ]);
 
-        DB::transaction(function () use ($request) {
+        $vente = null;
+
+        DB::transaction(function () use ($request, &$vente) {
 
             // 1. Créer la vente
             $vente = Vente::create([
-                'client_id'    => $request->client_id,
-                'user_id'      => auth()->id(),
-                'numero_vente' => Vente::genererNumero(),
-                'date_vente'   => $request->date_vente,
-                'montant_total'=> 0,
-                'statut'       => 'en_attente',
-                'note'         => $request->note,
+                'client_id'     => $request->client_id,
+                'user_id'       => auth()->id(),
+                'numero_vente'  => Vente::genererNumero(),
+                'date_vente'    => $request->date_vente,
+                'montant_total' => 0,
+                'statut'        => 'en_attente',
+                'note'          => $request->note,
             ]);
 
             $montantTotal = 0;
@@ -102,14 +105,36 @@ class VenteController extends Controller
             ]);
         });
 
+        // 6. Enregistrer l'activité
+        $vente->load('client');
+        ActiviteService::enregistrer(
+            'creation',
+            'Ventes',
+            "Création de la vente {$vente->numero_vente} pour {$vente->client->nom} — " .
+            number_format($vente->montant_total, 0, ',', ' ') . " F CFA",
+            'Vente',
+            $vente->id
+        );
+
         return redirect()->route('ventes.index')
-                         ->with('success', 'Vente créée avec succès ! Facture générée automatiquement.');
+                         ->with('success',
+                             'Vente créée avec succès ! Facture générée automatiquement.');
     }
 
     // ── Détail d'une vente ──
     public function show(Vente $vente)
     {
         $vente->load(['client', 'user', 'details.produit', 'facture']);
+
+        // Enregistrer la consultation
+        ActiviteService::enregistrer(
+            'consultation',
+            'Ventes',
+            "Consultation de la vente {$vente->numero_vente}",
+            'Vente',
+            $vente->id
+        );
+
         return view('ventes.show', compact('vente'));
     }
 
@@ -119,6 +144,8 @@ class VenteController extends Controller
         $request->validate([
             'statut' => 'required|in:en_attente,confirmee,livree,annulee',
         ]);
+
+        $ancienStatut = $vente->statut;
 
         // Si on annule, on remet le stock
         if ($request->statut === 'annulee' && !$vente->isAnnulee()) {
@@ -133,6 +160,16 @@ class VenteController extends Controller
 
         $vente->update(['statut' => $request->statut]);
 
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'modification',
+            'Ventes',
+            "Changement statut vente {$vente->numero_vente} : " .
+            ucfirst($ancienStatut) . " → " . ucfirst($request->statut),
+            'Vente',
+            $vente->id
+        );
+
         return back()->with('success', 'Statut mis à jour avec succès !');
     }
 
@@ -144,7 +181,19 @@ class VenteController extends Controller
                 'Vous devez d\'abord annuler la vente avant de la supprimer !');
         }
 
+        $numeroVente = $vente->numero_vente;
+        $clientNom   = $vente->client->nom;
+
         $vente->delete();
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'suppression',
+            'Ventes',
+            "Suppression de la vente {$numeroVente} du client {$clientNom}",
+            'Vente',
+            null
+        );
 
         return redirect()->route('ventes.index')
                          ->with('success', 'Vente supprimée avec succès !');

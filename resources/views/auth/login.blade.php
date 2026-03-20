@@ -342,7 +342,7 @@
                     <div class="col-6">
                         <button class="compte-test"
                                 onclick="remplir('admin@actionnaire.com')">
-                            <strong>👑 Admin</strong>
+                            <strong> Admin</strong>
                             admin@actionnaire.com
                         </button>
                     </div>
@@ -356,14 +356,14 @@
                     <div class="col-6">
                         <button class="compte-test"
                                 onclick="remplir('magasinier@actionnaire.com')">
-                            <strong>📦 Magasinier</strong>
+                            <strong> Magasinier</strong>
                             magasinier@actionnaire.com
                         </button>
                     </div>
                     <div class="col-6">
                         <button class="compte-test"
                                 onclick="remplir('comptable@actionnaire.com')">
-                            <strong>💰 Comptable</strong>
+                            <strong> Comptable</strong>
                             comptable@actionnaire.com
                         </button>
                     </div>

@@ -45,7 +45,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="mb-1">🗺️ Carte des Livraisons</h4>
+        <h4 class="mb-1"> Carte des Livraisons</h4>
         <p class="text-muted mb-0">
             Visualisez toutes les livraisons sur la carte
         </p>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Paiement;
 use App\Models\Facture;
+use App\Services\ActiviteService;
 use Illuminate\Http\Request;
 
 class PaiementController extends Controller
@@ -15,12 +16,10 @@ class PaiementController extends Controller
                              ->latest()
                              ->paginate(10);
 
-        $totalPaiements  = Paiement::count();
-        $totalEncaisse   = Paiement::sum('montant');
-        $parEspeces      = Paiement::where('mode_paiement', 'especes')
-                                   ->sum('montant');
-        $parMobileMoney  = Paiement::where('mode_paiement', 'mobile_money')
-                                   ->sum('montant');
+        $totalPaiements = Paiement::count();
+        $totalEncaisse  = Paiement::sum('montant');
+        $parEspeces     = Paiement::where('mode_paiement', 'especes')->sum('montant');
+        $parMobileMoney = Paiement::where('mode_paiement', 'mobile_money')->sum('montant');
 
         return view('paiements.index', compact(
             'paiements', 'totalPaiements',
@@ -31,7 +30,6 @@ class PaiementController extends Controller
     // ── Formulaire création ──
     public function create()
     {
-        // On ne peut payer que les factures non payées
         $factures = Facture::where('statut', 'non_payee')
                            ->with('vente.client')
                            ->get();
@@ -67,7 +65,7 @@ class PaiementController extends Controller
         }
 
         // Créer le paiement
-        Paiement::create([
+        $paiement = Paiement::create([
             'facture_id'    => $request->facture_id,
             'montant'       => $request->montant,
             'mode_paiement' => $request->mode_paiement,
@@ -83,6 +81,27 @@ class PaiementController extends Controller
             $facture->update(['statut' => 'payee']);
         }
 
+        // Modes de paiement lisibles
+        $modes = [
+            'especes'      => 'Espèces',
+            'mobile_money' => 'Mobile Money',
+            'virement'     => 'Virement',
+            'cheque'       => 'Chèque',
+        ];
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'creation',
+            'Paiements',
+            "Paiement de " .
+            number_format($paiement->montant, 0, ',', ' ') .
+            " F — Facture : {$facture->numero} — " .
+            "Client : {$facture->vente->client->nom} — " .
+            "Mode : " . ($modes[$paiement->mode_paiement] ?? $paiement->mode_paiement),
+            'Paiement',
+            $paiement->id
+        );
+
         return redirect()->route('paiements.index')
                          ->with('success', 'Paiement enregistré avec succès !');
     }
@@ -91,19 +110,44 @@ class PaiementController extends Controller
     public function show(Paiement $paiement)
     {
         $paiement->load(['facture.vente.client', 'createdBy']);
+
+        // Enregistrer la consultation
+        ActiviteService::enregistrer(
+            'consultation',
+            'Paiements',
+            "Consultation du paiement #{$paiement->id} — " .
+            "Facture : {$paiement->facture->numero}",
+            'Paiement',
+            $paiement->id
+        );
+
         return view('paiements.show', compact('paiement'));
     }
 
     // ── Suppression ──
     public function destroy(Paiement $paiement)
     {
-        // Si on supprime un paiement → remettre la facture à non_payee
-        $facture = $paiement->facture;
+        $facture    = $paiement->facture;
+        $montant    = $paiement->montant;
+        $paiementId = $paiement->id;
+        $factureNum = $facture->numero;
+
         $paiement->delete();
 
         if ($facture->statut === 'payee') {
             $facture->update(['statut' => 'non_payee']);
         }
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'suppression',
+            'Paiements',
+            "Suppression du paiement #{$paiementId} de " .
+            number_format($montant, 0, ',', ' ') .
+            " F — Facture : {$factureNum}",
+            'Paiement',
+            $paiementId
+        );
 
         return redirect()->route('paiements.index')
                          ->with('success', 'Paiement supprimé avec succès !');
@@ -112,26 +156,32 @@ class PaiementController extends Controller
     // ── Rapport financier ──
     public function rapport()
     {
-        $totalEncaisse  = Paiement::sum('montant');
-        $totalDu        = Facture::where('statut', 'non_payee')->sum('montant');
-        $facturesPayees = Facture::where('statut', 'payee')->count();
+        $totalEncaisse    = Paiement::sum('montant');
+        $totalDu          = Facture::where('statut', 'non_payee')->sum('montant');
+        $facturesPayees   = Facture::where('statut', 'payee')->count();
         $facturesImpayees = Facture::where('statut', 'non_payee')->count();
 
-        // Paiements par mode
-        $parMode = Paiement::selectRaw('mode_paiement, SUM(montant) as total, COUNT(*) as nombre')
-                           ->groupBy('mode_paiement')
-                           ->get();
+        $parMode = Paiement::selectRaw(
+                       'mode_paiement, SUM(montant) as total, COUNT(*) as nombre'
+                   )
+                   ->groupBy('mode_paiement')
+                   ->get();
 
-        // Paiements du mois en cours
         $paiementsMois = Paiement::whereMonth('date_paiement', now()->month)
                                  ->whereYear('date_paiement', now()->year)
                                  ->sum('montant');
 
-        // Derniers paiements
         $derniersPaiements = Paiement::with(['facture.vente.client', 'createdBy'])
                                      ->latest()
                                      ->limit(10)
                                      ->get();
+
+        // Enregistrer la consultation du rapport
+        ActiviteService::enregistrer(
+            'consultation',
+            'Paiements',
+            "Consultation du rapport financier"
+        );
 
         return view('paiements.rapport', compact(
             'totalEncaisse', 'totalDu',

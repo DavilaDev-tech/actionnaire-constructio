@@ -8,6 +8,7 @@ use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\VenteController;
+use App\Http\Controllers\ActiviteController;
 use App\Http\Controllers\FactureController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\PaiementController;
@@ -202,6 +203,13 @@ Route::prefix('notifications')->name('notifications.')->group(function () {
     Route::delete('/{id}',
                   [NotificationController::class, 'destroy'])
          ->name('destroy');
+});
+// Journal activités (admin seulement)
+Route::middleware(['role:admin'])->group(function () {
+    Route::get('activites', [ActiviteController::class, 'index'])
+         ->name('activites.index');
+    Route::delete('activites/vider', [ActiviteController::class, 'vider'])
+         ->name('activites.vider');
 });
 require __DIR__ . '/auth.php';
 

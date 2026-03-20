@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Fournisseur;
+use App\Services\ActiviteService;
 use Illuminate\Http\Request;
 
 class FournisseurController extends Controller
@@ -37,9 +38,20 @@ class FournisseurController extends Controller
             'contact_personne' => 'nullable|string|max:200',
         ]);
 
-        Fournisseur::create($request->only(
+        $fournisseur = Fournisseur::create($request->only(
             'nom', 'telephone', 'email', 'adresse', 'contact_personne'
         ));
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'creation',
+            'Fournisseurs',
+            "Création du fournisseur {$fournisseur->nom}" .
+            ($fournisseur->telephone ? " — Tél : {$fournisseur->telephone}" : '') .
+            ($fournisseur->contact_personne ? " — Contact : {$fournisseur->contact_personne}" : ''),
+            'Fournisseur',
+            $fournisseur->id
+        );
 
         return redirect()->route('fournisseurs.index')
                          ->with('success', 'Fournisseur créé avec succès !');
@@ -51,6 +63,15 @@ class FournisseurController extends Controller
         $fournisseur->load(['produits', 'approvisionnements' => function($q) {
             $q->latest()->take(5);
         }]);
+
+        // Enregistrer la consultation
+        ActiviteService::enregistrer(
+            'consultation',
+            'Fournisseurs',
+            "Consultation de la fiche fournisseur {$fournisseur->nom}",
+            'Fournisseur',
+            $fournisseur->id
+        );
 
         return view('fournisseurs.show', compact('fournisseur'));
     }
@@ -72,9 +93,35 @@ class FournisseurController extends Controller
             'contact_personne' => 'nullable|string|max:200',
         ]);
 
+        // Sauvegarder les données avant modification
+        $avant = [
+            'nom'              => $fournisseur->nom,
+            'telephone'        => $fournisseur->telephone,
+            'email'            => $fournisseur->email,
+            'adresse'          => $fournisseur->adresse,
+            'contact_personne' => $fournisseur->contact_personne,
+        ];
+
         $fournisseur->update($request->only(
             'nom', 'telephone', 'email', 'adresse', 'contact_personne'
         ));
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'modification',
+            'Fournisseurs',
+            "Modification du fournisseur {$fournisseur->nom}",
+            'Fournisseur',
+            $fournisseur->id,
+            $avant,
+            [
+                'nom'              => $fournisseur->nom,
+                'telephone'        => $fournisseur->telephone,
+                'email'            => $fournisseur->email,
+                'adresse'          => $fournisseur->adresse,
+                'contact_personne' => $fournisseur->contact_personne,
+            ]
+        );
 
         return redirect()->route('fournisseurs.index')
                          ->with('success', 'Fournisseur modifié avec succès !');
@@ -89,7 +136,19 @@ class FournisseurController extends Controller
                 $fournisseur->produits()->count() . ' produit(s) associé(s) !');
         }
 
+        $nomFournisseur = $fournisseur->nom;
+        $fournisseurId  = $fournisseur->id;
+
         $fournisseur->delete();
+
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'suppression',
+            'Fournisseurs',
+            "Suppression du fournisseur {$nomFournisseur}",
+            'Fournisseur',
+            $fournisseurId
+        );
 
         return redirect()->route('fournisseurs.index')
                          ->with('success', 'Fournisseur supprimé avec succès !');

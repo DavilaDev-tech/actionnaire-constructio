@@ -5,7 +5,7 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="mb-1">🧾 Factures</h4>
+        <h4 class="mb-1"> Factures</h4>
         <p class="text-muted mb-0">Toutes les factures générées</p>
     </div>
 </div>

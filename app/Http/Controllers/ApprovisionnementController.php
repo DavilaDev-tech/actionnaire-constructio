@@ -6,6 +6,7 @@ use App\Models\Approvisionnement;
 use App\Models\ApproDetail;
 use App\Models\Fournisseur;
 use App\Models\Produit;
+use App\Services\ActiviteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -18,18 +19,15 @@ class ApprovisionnementController extends Controller
             ->latest()
             ->paginate(10);
 
-        $totalAppros = Approvisionnement::count();
+        $totalAppros   = Approvisionnement::count();
         $totalDepenses = Approvisionnement::where('statut', '=', 'recu')
-            ->sum('montant_total');
-        $enAttente = Approvisionnement::where('statut', '=', 'en_attente')->count();
-        $recus = Approvisionnement::where('statut', '=', 'recu')->count();
+                                          ->sum('montant_total');
+        $enAttente     = Approvisionnement::where('statut', '=', 'en_attente')->count();
+        $recus         = Approvisionnement::where('statut', '=', 'recu')->count();
 
         return view('approvisionnements.index', compact(
-            'appros',
-            'totalAppros',
-            'totalDepenses',
-            'enAttente',
-            'recus'
+            'appros', 'totalAppros',
+            'totalDepenses', 'enAttente', 'recus'
         ));
     }
 
@@ -37,13 +35,11 @@ class ApprovisionnementController extends Controller
     public function create()
     {
         $fournisseurs = Fournisseur::orderBy('nom')->get();
-        $produits = Produit::with('categorie')->orderBy('nom')->get();
-        $numero = Approvisionnement::genererNumero();
+        $produits     = Produit::with('categorie')->orderBy('nom')->get();
+        $numero       = Approvisionnement::genererNumero();
 
         return view('approvisionnements.create', compact(
-            'fournisseurs',
-            'produits',
-            'numero'
+            'fournisseurs', 'produits', 'numero'
         ));
     }
 
@@ -51,26 +47,28 @@ class ApprovisionnementController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'fournisseur_id' => 'required|exists:fournisseurs,id',
-            'date_appro' => 'required|date',
-            'note' => 'nullable|string',
-            'produits' => 'required|array|min:1',
-            'produits.*.produit_id' => 'required|exists:produits,id',
-            'produits.*.quantite' => 'required|integer|min:1',
+            'fournisseur_id'           => 'required|exists:fournisseurs,id',
+            'date_appro'               => 'required|date',
+            'note'                     => 'nullable|string',
+            'produits'                 => 'required|array|min:1',
+            'produits.*.produit_id'    => 'required|exists:produits,id',
+            'produits.*.quantite'      => 'required|integer|min:1',
             'produits.*.prix_unitaire' => 'required|numeric|min:0',
         ]);
 
-        DB::transaction(function () use ($request) {
+        $appro = null;
+
+        DB::transaction(function () use ($request, &$appro) {
 
             // 1. Créer l'approvisionnement
             $appro = Approvisionnement::create([
                 'fournisseur_id' => $request->fournisseur_id,
-                'user_id' => auth()->id(),
-                'numero' => Approvisionnement::genererNumero(),
-                'date_appro' => $request->date_appro,
-                'montant_total' => 0,
-                'statut' => 'en_attente',
-                'note' => $request->note,
+                'user_id'        => auth()->id(),
+                'numero'         => Approvisionnement::genererNumero(),
+                'date_appro'     => $request->date_appro,
+                'montant_total'  => 0,
+                'statut'         => 'en_attente',
+                'note'           => $request->note,
             ]);
 
             $montantTotal = 0;
@@ -81,10 +79,10 @@ class ApprovisionnementController extends Controller
 
                 ApproDetail::create([
                     'approvisionnement_id' => $appro->id,
-                    'produit_id' => $ligne['produit_id'],
-                    'quantite' => $ligne['quantite'],
-                    'prix_unitaire' => $ligne['prix_unitaire'],
-                    'sous_total' => $sousTotal,
+                    'produit_id'           => $ligne['produit_id'],
+                    'quantite'             => $ligne['quantite'],
+                    'prix_unitaire'        => $ligne['prix_unitaire'],
+                    'sous_total'           => $sousTotal,
                 ]);
 
                 $montantTotal += $sousTotal;
@@ -92,27 +90,38 @@ class ApprovisionnementController extends Controller
 
             // 3. Mettre à jour le montant total
             $appro->update(['montant_total' => $montantTotal]);
-
-            // NB: Le stock sera mis à jour uniquement
-            // quand le statut passe à "recu"
         });
 
+        // Enregistrer l'activité
+        $appro->load('fournisseur');
+        ActiviteService::enregistrer(
+            'creation',
+            'Approvisionnements',
+            "Création appro {$appro->numero} — Fournisseur : {$appro->fournisseur->nom} — " .
+            "Montant : " . number_format($appro->montant_total, 0, ',', ' ') . " F CFA",
+            'Approvisionnement',
+            $appro->id
+        );
+
         return redirect()->route('approvisionnements.index')
-            ->with('success', 'Approvisionnement créé avec succès !');
+                         ->with('success', 'Approvisionnement créé avec succès !');
     }
 
     // ── Détail ──
     public function show(Approvisionnement $approvisionnement)
     {
-        $approvisionnement->load([
-            'fournisseur',
-            'user',
-            'details.produit'
-        ]);
-        return view(
-            'approvisionnements.show',
-            compact('approvisionnement')
+        $approvisionnement->load(['fournisseur', 'user', 'details.produit']);
+
+        // Enregistrer la consultation
+        ActiviteService::enregistrer(
+            'consultation',
+            'Approvisionnements',
+            "Consultation de l'appro {$approvisionnement->numero}",
+            'Approvisionnement',
+            $approvisionnement->id
         );
+
+        return view('approvisionnements.show', compact('approvisionnement'));
     }
 
     // ── Changer statut ──
@@ -121,6 +130,8 @@ class ApprovisionnementController extends Controller
         $request->validate([
             'statut' => 'required|in:en_attente,recu,annule',
         ]);
+
+        $ancienStatut = $approvisionnement->statut;
 
         // Si on marque comme reçu → on ajoute au stock
         if ($request->statut === 'recu' && !$approvisionnement->isRecu()) {
@@ -144,6 +155,16 @@ class ApprovisionnementController extends Controller
 
         $approvisionnement->update(['statut' => $request->statut]);
 
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'modification',
+            'Approvisionnements',
+            "Changement statut appro {$approvisionnement->numero} : " .
+            ucfirst($ancienStatut) . " → " . ucfirst($request->statut),
+            'Approvisionnement',
+            $approvisionnement->id
+        );
+
         return back()->with('success', 'Statut mis à jour avec succès !');
     }
 
@@ -151,15 +172,25 @@ class ApprovisionnementController extends Controller
     public function destroy(Approvisionnement $approvisionnement)
     {
         if ($approvisionnement->isRecu()) {
-            return back()->with(
-                'error',
-                'Impossible de supprimer un approvisionnement déjà reçu !'
-            );
+            return back()->with('error',
+                'Impossible de supprimer un approvisionnement déjà reçu !');
         }
+
+        $numero         = $approvisionnement->numero;
+        $approvisionnementId = $approvisionnement->id;
 
         $approvisionnement->delete();
 
+        // Enregistrer l'activité
+        ActiviteService::enregistrer(
+            'suppression',
+            'Approvisionnements',
+            "Suppression de l'approvisionnement {$numero}",
+            'Approvisionnement',
+            $approvisionnementId
+        );
+
         return redirect()->route('approvisionnements.index')
-            ->with('success', 'Approvisionnement supprimé !');
+                         ->with('success', 'Approvisionnement supprimé !');
     }
 }
