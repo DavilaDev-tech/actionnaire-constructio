@@ -14,24 +14,45 @@ use Illuminate\Support\Facades\DB;
 class VenteController extends Controller
 {
     // ── Liste des ventes ──
-    public function index()
-    {
-        $ventes = Vente::with(['client', 'user'])
-                       ->latest()
-                       ->paginate(10);
+   public function index(Request $request)
+{
+    $search = $request->get('search', '');
 
-        $totalVentes    = Vente::count();
-        $chiffreAffaire = Vente::where('statut', '!=', 'annulee')
-                               ->sum('montant_total');
-        $enAttente      = Vente::where('statut', 'en_attente')->count();
-        $annulees       = Vente::where('statut', 'annulee')->count();
+    $query = Vente::with(['client', 'user'])->latest();
 
-        return view('ventes.index', compact(
-            'ventes', 'totalVentes',
-            'chiffreAffaire', 'enAttente', 'annulees'
-        ));
+    if ($search) {
+        $query->where(function($q) use ($search) {
+            $q->where('numero_vente', 'like', "%{$search}%")
+              ->orWhere('statut', 'like', "%{$search}%")
+              ->orWhereHas('client', function($q) use ($search) {
+                  $q->where('nom', 'like', "%{$search}%");
+              });
+        });
     }
 
+    $ventes = $query->paginate(10)->withQueryString();
+
+    $totalVentes    = Vente::count();
+    $chiffreAffaire = Vente::where('statut', '!=', 'annulee')->sum('montant_total');
+    $enAttente      = Vente::where('statut', 'en_attente')->count();
+    $annulees       = Vente::where('statut', 'annulee')->count();
+
+    if ($request->ajax()) {
+        return response()->json([
+            'html' => view('ventes.partials.tableau',
+                compact('ventes'))->render(),
+            'pagination' => view('partials.pagination',
+                compact('ventes'))->render(),
+            'total' => $ventes->total(),
+        ]);
+    }
+
+    return view('ventes.index', compact(
+        'ventes', 'totalVentes',
+        'chiffreAffaire', 'enAttente', 'annulees',
+        'search'
+    ));
+}
     // ── Formulaire création ──
     public function create()
     {

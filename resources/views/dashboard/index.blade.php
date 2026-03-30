@@ -26,11 +26,21 @@
         display: flex; align-items: center;
         justify-content: center;
         font-size: 1.5rem;
-        transition: transform 0.3s;
+        transition: transform 0.7s;
     }
     .stat-card:hover .stat-icon {
         transform: scale(1.1) rotate(5deg);
     }
+
+    /* Style des blocs de statistiques */
+.stat-card {
+    background-color: #021e3913 !important; /* Gris renforcé */
+    position: relative;
+    border: 3px solid #d33c05 !important; /* Bordure légère pour la structure */
+    overflow: hidden;
+    transition: transform 0.7s;
+}
+
 
     @keyframes fadeInUp {
         from { opacity: 0; transform: translateY(20px); }

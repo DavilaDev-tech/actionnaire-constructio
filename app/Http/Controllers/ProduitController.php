@@ -12,20 +12,42 @@ use Illuminate\Support\Facades\Storage;
 class ProduitController extends Controller
 {
     // ── Liste des produits ──
-    public function index()
-    {
-        $produits = Produit::with(['categorie', 'fournisseur'])
-                           ->latest()
-                           ->paginate(10);
+   public function index(Request $request)
+{
+    $search = $request->get('search', '');
 
-        $totalProduits = Produit::count();
-        $stockBas      = Produit::whereColumn('quantite_stock', '<=', 'seuil_alerte')->count();
-        $stockEpuise   = Produit::where('quantite_stock', 0)->count();
+    $query = Produit::with(['categorie', 'fournisseur'])->latest();
 
-        return view('produits.index', compact(
-            'produits', 'totalProduits', 'stockBas', 'stockEpuise'
-        ));
+    if ($search) {
+        $query->where(function($q) use ($search) {
+            $q->where('nom', 'like', "%{$search}%")
+              ->orWhere('unite', 'like', "%{$search}%")
+              ->orWhereHas('categorie', function($q) use ($search) {
+                  $q->where('nom', 'like', "%{$search}%");
+              });
+        });
     }
+
+    $produits      = $query->paginate(10)->withQueryString();
+    $totalProduits = Produit::count();
+    $stockBas      = Produit::whereColumn('quantite_stock', '<=', 'seuil_alerte')->count();
+    $stockEpuise   = Produit::where('quantite_stock', 0)->count();
+
+    if ($request->ajax()) {
+        return response()->json([
+            'html' => view('produits.partials.tableau',
+                compact('produits'))->render(),
+            'pagination' => view('partials.pagination',
+                compact('produits'))->render(),
+            'total' => $produits->total(),
+        ]);
+    }
+
+    return view('produits.index', compact(
+        'produits', 'totalProduits',
+        'stockBas', 'stockEpuise', 'search'
+    ));
+}
 
     // ── Formulaire création ──
     public function create()

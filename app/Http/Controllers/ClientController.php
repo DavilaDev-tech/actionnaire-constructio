@@ -9,19 +9,41 @@ use Illuminate\Http\Request;
 class ClientController extends Controller
 {
     // ── Liste ──
-    public function index()
-    {
-        $clients      = Client::withCount('ventes')
-                              ->latest()
-                              ->paginate(10);
-        $totalClients = Client::count();
-        $particuliers = Client::where('type', 'particulier')->count();
-        $entreprises  = Client::where('type', 'entreprise')->count();
+   public function index(Request $request)
+{
+    $search = $request->get('search', '');
 
-        return view('clients.index', compact(
-            'clients', 'totalClients', 'particuliers', 'entreprises'
-        ));
+    $query = Client::withCount('ventes')->latest();
+
+    if ($search) {
+        $query->where(function($q) use ($search) {
+            $q->where('nom', 'like', "%{$search}%")
+              ->orWhere('telephone', 'like', "%{$search}%")
+              ->orWhere('email', 'like', "%{$search}%")
+              ->orWhere('type', 'like', "%{$search}%");
+        });
     }
+
+    $clients      = $query->paginate(10)->withQueryString();
+    $totalClients = Client::count();
+    $particuliers = Client::where('type', 'particulier')->count();
+    $entreprises  = Client::where('type', 'entreprise')->count();
+
+    if ($request->ajax()) {
+        return response()->json([
+            'html' => view('clients.partials.tableau',
+                compact('clients'))->render(),
+            'pagination' => view('partials.pagination',
+                compact('clients'))->render(),
+            'total' => $clients->total(),
+        ]);
+    }
+
+    return view('clients.index', compact(
+        'clients', 'totalClients',
+        'particuliers', 'entreprises', 'search'
+    ));
+}
 
     // ── Formulaire création ──
     public function create()

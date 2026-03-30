@@ -1,8 +1,8 @@
 @extends('layouts.app')
 @section('title', 'Détail Facture')
 @section('page-title', 'Détail Facture')
-
 @section('content')
+
 <div class="row justify-content-center">
     <div class="col-md-9">
         <div class="card shadow-sm border-0">
