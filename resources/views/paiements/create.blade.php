@@ -13,156 +13,106 @@
             </div>
             <div class="card-body">
 
+                @if(session('error'))
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        {{ session('error') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+
                 @if($factures->isEmpty())
                 <div class="alert alert-info">
-                    <i class="bi bi-info-circle me-2"></i>
-                    Toutes les factures sont payées !
-                    <a href="{{ route('factures.index') }}" class="alert-link">
-                        Voir les factures
-                    </a>
+                    Toutes les factures sont payées ! 
+                    <a href="{{ route('factures.index') }}" class="alert-link">Voir les factures</a>
                 </div>
                 @else
-                <form action="{{ route('paiements.store') }}" method="POST">
+                <form action="{{ route('paiements.store') }}" method="POST" id="form-paiement">
                     @csrf
                     <div class="row g-3">
 
-                        <!-- Facture -->
+                        {{-- 1. Sélection de la facture --}}
                         <div class="col-12">
-                            <label class="form-label fw-semibold">
-                                Facture <span class="text-danger">*</span>
-                            </label>
-                            <select name="facture_id"
-                                    class="form-select @error('facture_id') is-invalid @enderror"
-                                    id="select-facture" required>
+                            <label class="form-label fw-semibold">Facture <span class="text-danger">*</span></label>
+                            <select name="facture_id" class="form-select" id="select-facture" required>
                                 <option value="">-- Sélectionner une facture --</option>
                                 @foreach($factures as $facture)
                                     <option value="{{ $facture->id }}"
                                             data-montant="{{ $facture->montant }}"
-                                            data-restant="{{ $facture->montant_restant }}"
+                                            data-restant="{{ $facture->resteAPayer() }}"
                                             data-client="{{ $facture->vente->client->nom }}"
-                                            {{ old('facture_id')==$facture->id ? 'selected':'' }}>
-                                        {{ $facture->numero }} —
-                                        {{ $facture->vente->client->nom }} —
-                                        {{ number_format($facture->montant_restant, 0, ',', ' ') }} F restant
+                                            {{ old('facture_id') == $facture->id ? 'selected' : '' }}>
+                                        {{ $facture->numero }} — {{ $facture->vente->client->nom }} — (Reste : {{ number_format($facture->resteAPayer(), 0, ',', ' ') }} F)
                                     </option>
                                 @endforeach
                             </select>
-                            @error('facture_id')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
                         </div>
 
-                        <!-- Info facture -->
+                        {{-- 2. Bloc Info Bleu (Mis à jour avec TVA) --}}
                         <div class="col-12" id="info-facture" style="display:none">
-                            <div class="alert alert-info mb-0">
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        <small class="text-muted d-block">Client</small>
+                            <div class="alert alert-info border-0 shadow-sm">
+                                <div class="row text-center">
+                                    <div class="col-md-3 border-end">
+                                        <small class="text-muted d-block small fw-bold">CLIENT</small>
                                         <strong id="info-client">—</strong>
                                     </div>
-                                    <div class="col-md-4">
-                                        <small class="text-muted d-block">
-                                            Montant total
-                                        </small>
-                                        <strong id="info-montant">—</strong>
+                                    <div class="col-md-3 border-end">
+                                        <small class="text-muted d-block small fw-bold">TOTAL (HT)</small>
+                                        <strong id="info-montant-ht">—</strong>
                                     </div>
-                                    <div class="col-md-4">
-                                        <small class="text-muted d-block">
-                                            Restant à payer
-                                        </small>
-                                        <strong id="info-restant" class="text-danger">
-                                            —
-                                        </strong>
+                                    <div class="col-md-3 border-end">
+                                        <small class="text-muted d-block small fw-bold">TVA (19.25%)</small>
+                                        <strong id="info-tva" class="text-warning">—</strong>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <small class="text-muted d-block small fw-bold">RESTE (TTC)</small>
+                                        <strong id="info-restant" class="text-danger">—</strong>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Montant -->
+                        {{-- 3. Montant à encaisser --}}
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">
-                                Montant (F CFA) <span class="text-danger">*</span>
-                            </label>
-                            <input type="number" name="montant"
-                                   class="form-control @error('montant') is-invalid @enderror"
-                                   id="input-montant"
-                                   value="{{ old('montant') }}"
-                                   min="1" step="0.01" required>
-                            @error('montant')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <label class="form-label fw-semibold">Montant à encaisser (F CFA) <span class="text-danger">*</span></label>
+                            <input type="number" name="montant" class="form-control" id="input-montant" value="{{ old('montant') }}" required>
                         </div>
 
-                        <!-- Date paiement -->
+                        {{-- 4. Date de paiement --}}
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">
-                                Date de paiement <span class="text-danger">*</span>
-                            </label>
-                            <input type="date" name="date_paiement"
-                                   class="form-control"
-                                   value="{{ old('date_paiement', date('Y-m-d')) }}"
-                                   required>
+                            <label class="form-label fw-semibold">Date de paiement</label>
+                            <input type="date" name="date_paiement" class="form-control bg-light" value="{{ date('Y-m-d') }}" readonly>
                         </div>
 
-                        <!-- Mode paiement -->
+                        {{-- 5. Mode de règlement --}}
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">
-                                Mode de paiement <span class="text-danger">*</span>
-                            </label>
-                            <select name="mode_paiement"
-                                    class="form-select @error('mode_paiement') is-invalid @enderror"
-                                    required>
-                                <option value="">-- Choisir --</option>
-                                <option value="especes"
-                                    {{ old('mode_paiement')=='especes' ? 'selected':'' }}>
-                                    💵 Espèces
-                                </option>
-                                <option value="mobile_money"
-                                    {{ old('mode_paiement')=='mobile_money' ? 'selected':'' }}>
-                                    📱 Mobile Money
-                                </option>
-                                <option value="virement"
-                                    {{ old('mode_paiement')=='virement' ? 'selected':'' }}>
-                                    🏦 Virement bancaire
-                                </option>
-                                <option value="cheque"
-                                    {{ old('mode_paiement')=='cheque' ? 'selected':'' }}>
-                                    📄 Chèque
-                                </option>
+                            <label class="form-label fw-semibold">Mode de règlement <span class="text-danger">*</span></label>
+                            <select name="mode_paiement" class="form-select" required>
+                                <option value="especes">💵 Espèces</option>
+                                <option value="mobile_money">📱 Mobile Money</option>
+                                <option value="virement">🏦 Virement bancaire</option>
+                                <option value="cheque">📄 Chèque</option>
                             </select>
-                            @error('mode_paiement')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
                         </div>
 
-                        <!-- Référence -->
+                        {{-- 6. Référence --}}
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">
-                                Référence / N° reçu
-                            </label>
-                            <input type="text" name="reference"
-                                   class="form-control"
-                                   value="{{ old('reference') }}"
-                                   placeholder="Ex: MTN-2024-001">
+                            <label class="form-label fw-semibold">Référence</label>
+                            <input type="text" name="reference" class="form-control" placeholder="Ex: ID Transaction">
                         </div>
 
-                        <!-- Note -->
+                        {{-- 7. Note / Observation --}}
                         <div class="col-12">
-                            <label class="form-label fw-semibold">Note</label>
-                            <textarea name="note" class="form-control" rows="2"
-                                      placeholder="Remarque optionnelle...">{{ old('note') }}</textarea>
+                            <label class="form-label fw-semibold">Note / Observation (Auto)</label>
+                            <textarea name="note" id="input-note" class="form-control bg-light" rows="2" readonly style="font-style: italic;"></textarea>
                         </div>
 
                     </div>
 
                     <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-check-lg me-1"></i> Enregistrer
+                        <button type="submit" class="btn btn-primary btn-lg px-4">
+                            <i class="bi bi-check-lg me-1"></i> Enregistrer l'encaissement
                         </button>
-                        <a href="{{ route('paiements.index') }}"
-                           class="btn btn-outline-secondary btn-lg">
-                            <i class="bi bi-arrow-left me-1"></i> Retour
-                        </a>
+                        <a href="{{ route('paiements.index') }}" class="btn btn-outline-secondary btn-lg">Annuler</a>
                     </div>
                 </form>
                 @endif
@@ -174,25 +124,68 @@
 
 @push('scripts')
 <script>
-document.getElementById('select-facture').addEventListener('change', function() {
-    const opt     = this.options[this.selectedIndex];
-    const montant = opt.dataset.montant  || 0;
-    const restant = opt.dataset.restant  || 0;
-    const client  = opt.dataset.client   || '';
+document.addEventListener('DOMContentLoaded', function() {
+    const selectFacture = document.getElementById('select-facture');
+    const inputMontant  = document.getElementById('input-montant');
+    const inputNote     = document.getElementById('input-note');
+    const blocBleu      = document.getElementById('info-facture');
 
-    if (client) {
-        document.getElementById('info-facture').style.display = 'block';
-        document.getElementById('info-client').textContent    = client;
-        document.getElementById('info-montant').textContent   =
-            parseFloat(montant).toLocaleString('fr-FR') + ' F CFA';
-        document.getElementById('info-restant').textContent   =
-            parseFloat(restant).toLocaleString('fr-FR') + ' F CFA';
-        document.getElementById('input-montant').value        = restant;
-        document.getElementById('input-montant').max          = restant;
-    } else {
-        document.getElementById('info-facture').style.display = 'none';
-        document.getElementById('input-montant').value        = '';
+    function mettreAJourLaNote() {
+        const option = selectFacture.options[selectFacture.selectedIndex];
+        
+        if (!option || option.value === "") {
+            if(blocBleu) blocBleu.style.display = 'none';
+            inputNote.value = "";
+            return;
+        }
+
+        if(blocBleu) blocBleu.style.display = 'block';
+
+        // Récupération des données HT et Reste (qui est TTC maintenant via le modèle)
+        const ht = parseFloat(option.getAttribute('data-montant')) || 0;
+        const resteInitialTTC = parseFloat(option.getAttribute('data-restant')) || 0;
+        const montantSaisi = parseFloat(inputMontant.value) || 0;
+        
+        // Calcul manuel de la TVA pour l'affichage JS
+        const taux = 19.25;
+        const tva = (ht * taux) / 100;
+
+        // Mise à jour des éléments du bloc bleu
+        const elClient = document.getElementById('info-client');
+        const elHT     = document.getElementById('info-montant-ht');
+        const elTVA    = document.getElementById('info-tva');
+        const elReste  = document.getElementById('info-restant');
+
+        if(elClient) elClient.innerText = option.getAttribute('data-client');
+        if(elHT)     elHT.innerText     = ht.toLocaleString() + " F";
+        if(elTVA)    elTVA.innerText    = tva.toLocaleString() + " F";
+        if(elReste)  elReste.innerText  = resteInitialTTC.toLocaleString() + " F";
+
+        // Logique de la Note
+        let message = "";
+        if (montantSaisi <= 0) {
+            message = "En attente de saisie...";
+        } else if (montantSaisi >= resteInitialTTC) {
+            message = "Paiement intégral de " + montantSaisi.toLocaleString() + " F (TTC). La facture sera SOLDÉE.";
+        } else {
+            let reliquat = resteInitialTTC - montantSaisi;
+            message = "Paiement partiel de " + montantSaisi.toLocaleString() + " F. Reste à payer (TTC) : " + reliquat.toLocaleString() + " F.";
+        }
+        
+        inputNote.value = message;
     }
+
+    selectFacture.addEventListener('change', function() {
+        const optionChoisie = this.options[this.selectedIndex];
+        if (optionChoisie && optionChoisie.value !== "") {
+            // On remplit avec le reste TTC par défaut
+            inputMontant.value = optionChoisie.getAttribute('data-restant');
+        }
+        mettreAJourLaNote();
+    });
+
+    inputMontant.addEventListener('input', mettreAJourLaNote);
+    mettreAJourLaNote();
 });
 </script>
 @endpush

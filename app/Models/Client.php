@@ -15,6 +15,12 @@ class Client extends Model
         'email',
         'adresse',
         'type',
+        'exonere_tva',
+        'numero_exoneration',
+    ];
+
+    protected $casts = [
+        'exonere_tva' => 'boolean',
     ];
 
     // ── Relations ──
@@ -37,5 +43,15 @@ class Client extends Model
     public function getTotalAchatsAttribute(): float
     {
         return $this->ventes()->sum('montant_total');
+    }
+
+    public function getLibelleTvaAttribute(): string
+    {
+        return $this->exonere_tva ? '⚪ Exonéré TVA' : '🟠 Assujetti TVA';
+    }
+
+    public function getTvaApplicableAttribute(): bool
+    {
+        return !$this->exonere_tva;
     }
 }

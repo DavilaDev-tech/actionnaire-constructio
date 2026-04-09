@@ -79,21 +79,19 @@ class BackupController extends Controller
     }
 }
     // ── Télécharger une sauvegarde ──
-    public function telecharger(Request $request)
-    {
-        $path = $request->get('path');
-        $disk = Storage::disk('local');
+   public function telecharger(Request $request)
+{
+    $path = $request->get('path');
+    $disk = Storage::disk('local');
 
-        if (!$disk->exists($path)) {
-            return back()->with('error', 'Fichier introuvable !');
-        }
-
-        return response()->download(
-            storage_path('app/' . $path),
-            basename($path)
-        );
+    // On vérifie sur le disque local (qui est storage/app)
+    if (!$disk->exists($path)) {
+        return back()->with('error', 'Fichier introuvable sur le serveur !');
     }
 
+    // disk->path($path) donne le chemin complet correct : C:\xampp\...\storage\app\Actionnaire-construction\...
+    return response()->download($disk->path($path));
+}
     // ── Supprimer une sauvegarde ──
     public function supprimer(Request $request)
     {

@@ -54,13 +54,20 @@ class ClientController extends Controller
     // ── Enregistrement ──
     public function store(Request $request)
     {
-        $request->validate([
-            'nom'       => 'required|string|max:200',
-            'telephone' => 'nullable|string|max:20',
-            'email'     => 'nullable|email|unique:clients,email',
-            'adresse'   => 'nullable|string|max:500',
-            'type'      => 'required|in:particulier,entreprise',
-        ]);
+       $request->validate([
+        'email' => 'nullable|email:rfc,dns|unique:clients,email',
+        'telephone' => [
+            'required',
+            // ^6 signifie "commence par 6"
+            // [0-9]{8} signifie "suivi de 8 chiffres"
+            // $ signifie "s'arrête là" (donc pas 10 chiffres)
+            'regex:/^6[0-9]{8}$/', 
+            'unique:clients,telephone'
+        ],
+    ], [
+        'telephone.regex' => 'Le numéro doit commencer par 6 et contenir exactement 9 chiffres.',
+        'email.email' => 'Veuillez entrer une adresse email valide (ex: contact@domaine.com).',
+    ]);
 
         $client = Client::create($request->only(
             'nom', 'telephone', 'email', 'adresse', 'type'

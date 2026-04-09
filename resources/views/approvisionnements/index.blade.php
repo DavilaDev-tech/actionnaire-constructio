@@ -2,143 +2,259 @@
 @section('title', 'Approvisionnements')
 @section('page-title', 'Gestion des Approvisionnements')
 
+@push('styles')
+<style>
+    .hector-stat {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #F3F4F6;
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        transition: all 0.2s;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .hector-stat:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+        transform: translateY(-2px);
+    }
+    .hector-stat-icon {
+        width: 48px; height: 48px;
+        border-radius: 10px;
+        display: flex; align-items: center;
+        justify-content: center;
+        font-size: 1.3rem; flex-shrink: 0;
+    }
+    .hector-stat-value {
+        font-size: 1.6rem; font-weight: 700;
+        line-height: 1; color: #111827;
+    }
+    .hector-stat-label {
+        font-size: 0.78rem; color: #9CA3AF;
+        margin-top: 3px; font-weight: 500;
+    }
+    .hector-table thead th {
+        background: #F9FAFB !important;
+        color: #6B7280 !important;
+        font-size: 0.72rem !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.8px !important;
+        text-transform: uppercase !important;
+        padding: 12px 16px !important;
+        border-bottom: 1px solid #F3F4F6 !important;
+        border-top: none !important;
+    }
+    .hector-table tbody td {
+        padding: 14px 16px !important;
+        border-bottom: 1px solid #F9FAFB !important;
+        border-top: none !important;
+        color: #374151 !important;
+        font-size: 0.875rem !important;
+        vertical-align: middle !important;
+    }
+    .hector-table tbody tr:hover td { background: #FFFBF5 !important; }
+    .hector-table tbody tr:last-child td { border-bottom: none !important; }
+    .btn-action {
+        width: 32px; height: 32px;
+        border-radius: 8px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid #E5E7EB; background: white; color: #6B7280;
+        transition: all 0.15s; font-size: 0.85rem;
+        text-decoration: none; cursor: pointer;
+    }
+    .btn-action:hover.view { background:#EFF6FF;border-color:#93C5FD;color:#3B82F6; }
+    .btn-action:hover.del  { background:#FEF2F2;border-color:#FECACA;color:#EF4444; }
+    .search-wrapper { position: relative; }
+    .search-wrapper i {
+        position: absolute; left: 12px; top: 50%;
+        transform: translateY(-50%); color: #9CA3AF; font-size: 0.85rem;
+    }
+    .search-input {
+        border: 1px solid #E5E7EB; border-radius: 8px;
+        padding: 8px 14px 8px 38px; font-size: 0.875rem;
+        color: #374151; background: #F9FAFB; transition: all 0.2s; width: 280px;
+    }
+    .search-input:focus {
+        outline: none; border-color: #F97316; background: white;
+        box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
+    }
+    .statut-badge {
+        border-radius: 20px; padding: 3px 10px;
+        font-size: 0.72rem; font-weight: 600; display: inline-block;
+    }
+    .statut-en_attente { background:#FFFBEB;color:#D97706;border:1px solid #FDE68A; }
+    .statut-recu       { background:#F0FDF4;color:#10B981;border:1px solid #A7F3D0; }
+    .statut-annule     { background:#FEF2F2;color:#EF4444;border:1px solid #FECACA; }
+    .select-statut {
+        border: 1px solid #E5E7EB; border-radius: 8px;
+        padding: 4px 8px; font-size: 0.78rem;
+        color: #374151; background: #F9FAFB; cursor: pointer; transition: all 0.2s;
+    }
+    .select-statut:focus {
+        outline: none; border-color: #F97316;
+        box-shadow: 0 0 0 2px rgba(249,115,22,0.1);
+    }
+</style>
+@endpush
+
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4">
+
+{{-- ── En-tête ── --}}
+<div class="d-flex justify-content-between align-items-start mb-5">
     <div>
-        <h4 class="mb-1"> Approvisionnements</h4>
-        <p class="text-muted mb-0">Gérez les achats auprès des fournisseurs</p>
+        <h4 class="mb-1 fw-bold" style="color:#111827;font-size:1.3rem">
+            Approvisionnements
+        </h4>
+        <p style="color:#9CA3AF;font-size:0.875rem;margin:0">
+            {{ $totalAppros }} approvisionnement{{ $totalAppros > 1 ? 's' : '' }} enregistré{{ $totalAppros > 1 ? 's' : '' }}
+        </p>
     </div>
-    <a href="{{ route('approvisionnements.create') }}" class="btn btn-primary">
-        <i class="bi bi-plus-lg me-1"></i> Nouvel approvisionnement
+    <a href="{{ route('approvisionnements.create') }}"
+       class="btn btn-sm"
+       style="background:linear-gradient(135deg,#F97316,#EA580C);
+              color:white;border:none;border-radius:8px;
+              font-size:0.85rem;padding:8px 16px;
+              box-shadow:0 2px 8px rgba(249,115,22,0.3)">
+        <i class="bi bi-plus me-1"></i> Nouvel approvisionnement
     </a>
 </div>
 
-<!-- Statistiques -->
-<div class="row g-3 mb-4">
+{{-- ── Stats ── --}}
+<div class="row g-3 mb-5">
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm bg-primary text-white">
-            <div class="card-body d-flex align-items-center gap-3">
-                <i class="bi bi-arrow-down-circle fs-1 opacity-75"></i>
-                <div>
-                    <div class="fs-3 fw-bold">{{ $totalAppros }}</div>
-                    <div class="small opacity-75">Total appros</div>
-                </div>
+        <div class="hector-stat">
+            <div class="hector-stat-icon" style="background:#FFF7ED">
+                <i class="bi bi-arrow-down-circle-fill" style="color:#F97316"></i>
+            </div>
+            <div>
+                <div class="hector-stat-value">{{ $totalAppros }}</div>
+                <div class="hector-stat-label">Total appros</div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm bg-danger text-white">
-            <div class="card-body d-flex align-items-center gap-3">
-                <i class="bi bi-cash-stack fs-1 opacity-75"></i>
-                <div>
-                    <div class="fs-5 fw-bold">
-                        {{ number_format($totalDepenses, 0, ',', ' ') }} F
-                    </div>
-                    <div class="small opacity-75">Total dépenses</div>
+        <div class="hector-stat">
+            <div class="hector-stat-icon" style="background:#FEF2F2">
+                <i class="bi bi-cash-stack" style="color:#EF4444"></i>
+            </div>
+            <div>
+                <div class="hector-stat-value" style="font-size:1.1rem">
+                    {{ number_format($totalDepenses, 0, ',', ' ') }}
+                    <span style="font-size:0.75rem;color:#9CA3AF;font-weight:500"> F</span>
                 </div>
+                <div class="hector-stat-label">Total dépenses</div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm bg-warning text-dark">
-            <div class="card-body d-flex align-items-center gap-3">
-                <i class="bi bi-hourglass fs-1 opacity-75"></i>
-                <div>
-                    <div class="fs-3 fw-bold">{{ $enAttente }}</div>
-                    <div class="small opacity-75">En attente</div>
-                </div>
+        <div class="hector-stat">
+            <div class="hector-stat-icon" style="background:#FFFBEB">
+                <i class="bi bi-hourglass-split" style="color:#D97706"></i>
+            </div>
+            <div>
+                <div class="hector-stat-value">{{ $enAttente }}</div>
+                <div class="hector-stat-label">En attente</div>
+            </div>
+            <div class="ms-auto">
+                <span style="font-size:0.72rem;color:#D97706;font-weight:600;
+                             background:#FFFBEB;padding:3px 8px;border-radius:20px;
+                             border:1px solid #FDE68A">
+                    En attente
+                </span>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm bg-success text-white">
-            <div class="card-body d-flex align-items-center gap-3">
-                <i class="bi bi-check-circle fs-1 opacity-75"></i>
-                <div>
-                    <div class="fs-3 fw-bold">{{ $recus }}</div>
-                    <div class="small opacity-75">Reçus</div>
-                </div>
+        <div class="hector-stat">
+            <div class="hector-stat-icon" style="background:#F0FDF4">
+                <i class="bi bi-check-circle-fill" style="color:#10B981"></i>
+            </div>
+            <div>
+                <div class="hector-stat-value">{{ $recus }}</div>
+                <div class="hector-stat-label">Reçus</div>
+            </div>
+            <div class="ms-auto">
+                <span style="font-size:0.72rem;color:#10B981;font-weight:600;
+                             background:#F0FDF4;padding:3px 8px;border-radius:20px;
+                             border:1px solid #A7F3D0">
+                    ✓ Reçus
+                </span>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Tableau -->
-<div class="card shadow-sm border-0">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0 align-middle">
-            <thead class="table-dark">
-                <tr>
-                    <th>N° Appro</th>
-                    <th>Fournisseur</th>
-                    <th>Responsable</th>
-                    <th>Date</th>
-                    <th>Montant</th>
-                    <th>Statut</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($appros as $appro)
-                <tr>
-                    <td class="fw-bold">{{ $appro->numero }}</td>
-                    <td>{{ $appro->fournisseur->nom }}</td>
-                    <td>{{ $appro->user->nom_complet }}</td>
-                    <td>{{ $appro->date_appro->format('d/m/Y') }}</td>
-                    <td class="fw-semibold">
-                        {{ number_format($appro->montant_total, 0, ',', ' ') }} F
-                    </td>
-                    <td>
-                        <span class="badge bg-{{ $appro->couleur_statut }}">
-                            {{ ucfirst($appro->statut) }}
-                        </span>
-                    </td>
-                    <td>
-                        <div class="d-flex gap-1">
-                            <a href="{{ route('approvisionnements.show', $appro) }}"
-                               class="btn btn-sm btn-outline-info">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                            @if(!$appro->isRecu() && !$appro->isAnnule())
-                            <form action="{{ route('approvisionnements.statut', $appro) }}"
-                                  method="POST">
-                                @csrf @method('PATCH')
-                                <select name="statut"
-                                        class="form-select form-select-sm"
-                                        onchange="this.form.submit()">
-                                    <option value="en_attente"
-                                        {{ $appro->statut=='en_attente'?'selected':'' }}>
-                                        En attente
-                                    </option>
-                                    <option value="recu">✅ Marquer reçu</option>
-                                    <option value="annule">❌ Annuler</option>
-                                </select>
-                            </form>
-                            <form action="{{ route('approvisionnements.destroy', $appro) }}"
-                                  method="POST"
-                                  onsubmit="return confirm('Supprimer cet approvisionnement ?')">
-                                @csrf @method('DELETE')
-                                <button class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
-                            @endif
-                        </div>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="7" class="text-center text-muted py-5">
-                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                        Aucun approvisionnement trouvé.
-                    </td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+{{-- ── Tableau ── --}}
+<div class="card" style="border:1px solid #F3F4F6;border-radius:12px;
+                          box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+
+    {{-- Toolbar --}}
+    <div class="d-flex justify-content-between align-items-center px-4 py-3"
+         style="border-bottom:1px solid #F9FAFB">
+        <div class="search-wrapper">
+            <i class="bi bi-search"></i>
+            <input type="text" class="search-input"
+                   id="recherche-appros"
+                   placeholder="Rechercher un approvisionnement...">
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <select id="filtre-statut-appro"
+                    style="border:1px solid #E5E7EB;border-radius:8px;
+                           padding:7px 12px;font-size:0.82rem;
+                           color:#374151;background:#F9FAFB;cursor:pointer">
+                <option value="">Tous les statuts</option>
+                <option value="en_attente">En attente</option>
+                <option value="recu">Reçus</option>
+                <option value="annule">Annulés</option>
+            </select>
+            <span style="font-size:0.8rem;color:#9CA3AF">
+                <span class="fw-semibold" style="color:#111827">
+                    {{ $appros->total() }}
+                </span>
+                résultat{{ $appros->total() > 1 ? 's' : '' }}
+            </span>
+        </div>
     </div>
+
+    {{-- Table --}}
+    <div id="tableau-appros" class="table-responsive">
+        @include('approvisionnements.partials.tableau')
+    </div>
+
+    {{-- Pagination --}}
     @if($appros->hasPages())
-    <div class="card-footer">{{ $appros->links() }}</div>
+    <div style="border-top:1px solid #F9FAFB;padding:12px 20px">
+        {{ $appros->links() }}
+    </div>
     @endif
+
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const input  = document.getElementById('recherche-appros');
+    const filtre = document.getElementById('filtre-statut-appro');
+    const tbody  = document.querySelector('#tableau-appros tbody');
+
+    function filtrer() {
+        if (!tbody) return;
+        const q      = input.value.toLowerCase().trim();
+        const statut = filtre.value;
+        tbody.querySelectorAll('tr').forEach(function(row) {
+            const text        = row.textContent.toLowerCase();
+            const matchQ      = q === '' || text.includes(q);
+            const matchStatut = statut === '' ||
+                                row.innerHTML.includes('statut-' + statut);
+            row.style.display = (matchQ && matchStatut) ? '' : 'none';
+        });
+    }
+
+    if (input)  input.addEventListener('input', filtrer);
+    if (filtre) filtre.addEventListener('change', filtrer);
+});
+</script>
+@endpush
+
 @endsection

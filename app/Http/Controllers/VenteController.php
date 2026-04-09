@@ -66,82 +66,125 @@ class VenteController extends Controller
     }
 
     // ── Enregistrement ──
-    public function store(Request $request)
-    {
-        $request->validate([
-            'client_id'                => 'required|exists:clients,id',
-            'date_vente'               => 'required|date',
-            'note'                     => 'nullable|string',
-            'produits'                 => 'required|array|min:1',
-            'produits.*.produit_id'    => 'required|exists:produits,id',
-            'produits.*.quantite'      => 'required|integer|min:1',
-            'produits.*.prix_unitaire' => 'required|numeric|min:0',
-        ]);
+ public function store(Request $request)
+{
+    $request->validate([
+        'client_id'                => 'required|exists:clients,id',
+        'date_vente'               => 'required|date',
+        'note'                     => 'nullable|string',
+        'tva_applicable'           => 'nullable|boolean',
+        'produits'                 => 'required|array|min:1',
+        'produits.*.produit_id'    => 'required|exists:produits,id',
+        'produits.*.quantite'      => 'required|integer|min:1',
+        'produits.*.prix_unitaire' => 'required|numeric|min:0',
+    ]);
 
-        $vente = null;
+    try {
+        $vente = DB::transaction(function () use ($request) {
 
-        DB::transaction(function () use ($request, &$vente) {
+            // ── ÉTAPE 1 : Vérification globale du stock ──
+            foreach ($request->produits as $ligne) {
+                $produit = Produit::findOrFail($ligne['produit_id']);
 
-            // 1. Créer la vente
+                if ($produit->quantite_stock < $ligne['quantite']) {
+                    throw new \Exception(
+                        "Stock insuffisant pour \"{$produit->nom}\" ! " .
+                        "Stock disponible : {$produit->quantite_stock} {$produit->unite}. " .
+                        "Quantité demandée : {$ligne['quantite']} {$produit->unite}."
+                    );
+                }
+            }
+
+            // ── ÉTAPE 2 : TVA ──
+            $client        = Client::findOrFail($request->client_id);
+            $tvaApplicable = !$client->exonere_tva
+                             && $request->boolean('tva_applicable');
+
+            // ── ÉTAPE 3 : Création de la vente ──
             $vente = Vente::create([
-                'client_id'     => $request->client_id,
-                'user_id'       => auth()->id(),
-                'numero_vente'  => Vente::genererNumero(),
-                'date_vente'    => $request->date_vente,
-                'montant_total' => 0,
-                'statut'        => 'en_attente',
-                'note'          => $request->note,
+                'client_id'      => $request->client_id,
+                'user_id'        => auth()->id(),
+                'numero_vente'   => Vente::genererNumero(),
+                'date_vente'     => $request->date_vente ?? now(),
+                'montant_total'  => 0,
+                'montant_ht'     => 0,
+                'montant_tva'    => 0,
+                'tva_applicable' => $tvaApplicable,
+                'taux_tva'       => Vente::TAUX_TVA,
+                'statut'         => 'en_attente',
+                'note'           => $request->note,
             ]);
 
-            $montantTotal = 0;
+            $montantHT = 0;
 
-            // 2. Créer les lignes de vente
+            // ── ÉTAPE 4 : Lignes de vente + déduction stock ──
             foreach ($request->produits as $ligne) {
-                $sousTotal = $ligne['quantite'] * $ligne['prix_unitaire'];
+                $produit   = Produit::find($ligne['produit_id']);
+                $vraiPrix  = $produit->prix_vente;
+                $sousTotal = $ligne['quantite'] * $vraiPrix;
 
                 VenteDetail::create([
                     'vente_id'      => $vente->id,
-                    'produit_id'    => $ligne['produit_id'],
+                    'produit_id'    => $produit->id,
                     'quantite'      => $ligne['quantite'],
-                    'prix_unitaire' => $ligne['prix_unitaire'],
+                    'prix_unitaire' => $vraiPrix,
                     'sous_total'    => $sousTotal,
                 ]);
 
-                // 3. Déduire le stock
-                $produit = Produit::find($ligne['produit_id']);
+                // Déduction réelle du stock
                 $produit->decrement('quantite_stock', $ligne['quantite']);
 
-                $montantTotal += $sousTotal;
+                $montantHT += $sousTotal;
             }
 
-            // 4. Mettre à jour le montant total
-            $vente->update(['montant_total' => $montantTotal]);
+            // ── ÉTAPE 5 : Calcul TVA ──
+            $montantTVA = $tvaApplicable
+                ? round($montantHT * (Vente::TAUX_TVA / 100), 2)
+                : 0;
+            $montantTTC = $montantHT + $montantTVA;
 
-            // 5. Créer la facture automatiquement
-            Facture::create([
-                'vente_id' => $vente->id,
-                'numero'   => Facture::genererNumero(),
-                'montant'  => $montantTotal,
-                'statut'   => 'non_payee',
+            // ── ÉTAPE 6 : Mise à jour montants vente ──
+            $vente->update([
+                'montant_ht'    => $montantHT,
+                'montant_tva'   => $montantTVA,
+                'montant_total' => $montantTTC,
             ]);
+
+            // ── ÉTAPE 7 : Création facture ──
+            Facture::create([
+                'vente_id'       => $vente->id,
+                'numero'         => Facture::genererNumero(),
+                'montant'        => $montantTTC,
+                'montant_ht'     => $montantHT,
+                'montant_tva'    => $montantTVA,
+                'tva_applicable' => $tvaApplicable,
+                'statut'         => 'non_payee',
+            ]);
+
+            return $vente;
         });
 
-        // 6. Enregistrer l'activité
+        // ── ÉTAPE 8 : Log activité + redirection ──
         $vente->load('client');
         ActiviteService::enregistrer(
             'creation',
             'Ventes',
-            "Création de la vente {$vente->numero_vente} pour {$vente->client->nom} — " .
-            number_format($vente->montant_total, 0, ',', ' ') . " F CFA",
+            "Vente {$vente->numero_vente} pour {$vente->client->nom} — " .
+            ($vente->tva_applicable ? "TVA incluse — " : "Sans TVA — ") .
+            "TTC : " . number_format($vente->montant_total, 0, ',', ' ') . " F",
             'Vente',
             $vente->id
         );
 
         return redirect()->route('ventes.index')
-                         ->with('success',
-                             'Vente créée avec succès ! Facture générée automatiquement.');
-    }
+                         ->with('success', 'Vente créée avec succès ! Facture générée.');
 
+    } catch (\Exception $e) {
+        return back()
+            ->withInput()
+            ->with('error', $e->getMessage());
+    }
+}
     // ── Détail d'une vente ──
     public function show(Vente $vente)
     {

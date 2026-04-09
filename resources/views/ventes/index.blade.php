@@ -289,4 +289,41 @@
 
 </div>
 
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const input = document.getElementById('recherche-ventes');
+    const tbody = document.querySelector('.hector-table tbody');
+
+    function filtrer() {
+        const q = input.value.toLowerCase().trim();
+        const rows = tbody.querySelectorAll('tr');
+        let visible = 0;
+
+        rows.forEach(function(row) {
+            const cells = row.querySelectorAll('td');
+            let match = false;
+
+            cells.forEach(function(cell) {
+                if (cell.textContent.toLowerCase().includes(q)) {
+                    match = true;
+                }
+            });
+
+            if (match) {
+                row.style.display = '';
+                visible++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Mettre à jour le compteur
+        document.getElementById('compteur-clients').textContent = visible;
+    } 
+
+    if (input) input.addEventListener('input', filtrer);
+});
+</script>
+@endpush
 @endsection
